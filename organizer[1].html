@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SYSSA — Organizer Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0f2035;font-family:'Lato',sans-serif;color:#fff;min-height:100vh;display:flex;flex-direction:column;}
+
+/* loading */
+#loading{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;}
+#loading p{font-size:13px;color:rgba(255,255,255,.5);}
+.spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.1);border-top-color:#4dd9a0;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+#error-screen{display:none;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;}
+#error-screen p{color:#f87171;font-size:14px;max-width:400px;line-height:1.6;}
+
+/* ── MAIN APP ── */
+#app{display:none;flex-direction:column;min-height:100vh;}
+
+.top-bar{background:#122840;border-bottom:1px solid rgba(255,255,255,0.1);padding:12px 20px;display:flex;align-items:center;gap:12px;}
+.top-bar-title{flex:1;font-size:13px;font-weight:700;color:#e8c96a;}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#4dd9a0;animation:pulse 1.5s infinite;flex-shrink:0;}
+.status-dot.offline{background:#f87171;animation:none;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.status-label{font-size:11px;color:rgba(255,255,255,.5);}
+
+.layout{display:grid;grid-template-columns:1fr 300px;flex:1;min-height:0;}
+@media(max-width:700px){.layout{grid-template-columns:1fr;}}
+
+.agenda-panel{padding:20px;overflow-y:auto;max-height:calc(100vh - 54px);}
+.section-title{text-align:center;padding:14px 0 8px;font-size:12px;font-weight:700;color:#e8c96a;letter-spacing:.05em;border-top:1px solid rgba(255,255,255,.12);margin-top:8px;}
+.section-title:first-child{border-top:none;margin-top:0;}
+.item{display:flex;gap:0;margin-bottom:3px;border-left:3px solid transparent;border-radius:0 6px 6px 0;cursor:pointer;transition:background .15s,border-color .15s;}
+.item:hover:not(.break){background:rgba(255,255,255,.06);}
+.item.live{border-left-color:#4dd9a0;background:rgba(29,158,117,.18);}
+.item.break{cursor:default;opacity:.6;}
+.t-col{min-width:84px;padding:9px 10px 9px 0;font-size:11px;font-weight:700;color:#e8c96a;flex-shrink:0;line-height:1.35;}
+.divline{width:1px;background:rgba(255,255,255,.2);flex-shrink:0;margin:6px 0;}
+.i-col{flex:1;padding:9px 0 9px 12px;}
+.i-name{font-size:12.5px;font-weight:700;color:#fff;line-height:1.35;}
+.item.live .i-name{color:#4dd9a0;}
+.i-sub{font-size:11px;color:rgba(255,255,255,.55);margin-top:2px;line-height:1.4;}
+.item.live .i-sub{color:rgba(77,217,160,.75);}
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:7px;vertical-align:middle;}
+.badge-live{background:#4dd9a0;color:#0a3d2a;}
+.badge-next{background:rgba(255,255,255,.12);color:rgba(255,255,255,.6);}
+
+.side-panel{background:#122840;border-left:1px solid rgba(255,255,255,.1);padding:20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:calc(100vh - 54px);}
+.now-card{background:rgba(29,158,117,.18);border:1.5px solid #4dd9a0;border-radius:10px;padding:14px;}
+.now-label{font-size:10px;color:#4dd9a0;font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;display:flex;align-items:center;gap:5px;}
+.now-name{font-size:16px;font-weight:700;color:#fff;margin-bottom:3px;line-height:1.3;}
+.now-talk{font-size:11px;color:rgba(77,217,160,.8);line-height:1.4;}
+.next-card{background:rgba(255,255,255,.06);border-radius:8px;padding:12px;}
+.next-label{font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;}
+.next-name{font-size:13px;font-weight:700;color:rgba(255,255,255,.85);}
+.next-talk{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px;}
+.ctrl-btns{display:flex;flex-direction:column;gap:8px;}
+.btn{padding:11px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;border:none;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;}
+.btn-next{background:#4dd9a0;color:#0a3d2a;}
+.btn-next:hover{background:#3dc990;}
+.btn-next:active{transform:scale(.98);}
+.btn-prev{background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);}
+.btn-prev:hover{background:rgba(255,255,255,.14);}
+.audience-link{background:rgba(232,201,106,.08);border:1px solid rgba(232,201,106,.3);border-radius:8px;padding:12px;}
+.audience-link p{font-size:11px;color:#e8c96a;margin-bottom:6px;font-weight:700;}
+.link-box{font-size:10px;color:rgba(255,255,255,.5);background:rgba(0,0,0,.25);border-radius:5px;padding:6px 8px;word-break:break-all;cursor:pointer;border:1px solid rgba(255,255,255,.1);}
+.link-box:hover{border-color:rgba(255,255,255,.3);}
+.copy-hint{font-size:10px;color:rgba(255,255,255,.3);margin-top:4px;text-align:center;}
+.btn-sml{padding:6px 10px;font-size:11px;font-weight:700;border-radius:5px;cursor:pointer;border:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.6);margin-top:5px;width:100%;}
+.btn-sml:hover{background:rgba(255,255,255,.14);}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Supabase-თან კავშირი...</p>
+</div>
+
+<div id="error-screen">
+  <p>❌ Supabase-თან კავშირი ვერ დამყარდა.<br>შეამოწმე ინტერნეტი და SQL გაქვს გაშვებული.</p>
+</div>
+
+<div id="app">
+  <div class="top-bar">
+    <span class="status-dot" id="status-dot"></span>
+    <span class="top-bar-title">SYSSA Nobel's Day — Organizer Dashboard</span>
+    <span class="status-label" id="status-label">დაკავშირება...</span>
+  </div>
+  <div class="layout">
+    <div class="agenda-panel" id="agenda-panel"></div>
+    <div class="side-panel">
+      <div class="now-card">
+        <div class="now-label"><span class="status-dot" style="width:6px;height:6px"></span>Now Speaking</div>
+        <div class="now-name" id="side-now-name">—</div>
+        <div class="now-talk" id="side-now-talk"></div>
+      </div>
+      <div class="next-card">
+        <div class="next-label">▶ Up next</div>
+        <div class="next-name" id="side-next-name">—</div>
+        <div class="next-talk" id="side-next-talk"></div>
+      </div>
+      <div class="ctrl-btns">
+        <button class="btn btn-prev" onclick="movePrev()">← წინა სპიკერი</button>
+        <button class="btn btn-next" onclick="moveNext()">შემდეგი სპიკერი →</button>
+      </div>
+      <div class="audience-link">
+        <p>📱 მსმენელების ბმული</p>
+        <div class="link-box" id="audience-link-box" onclick="copyLink()">audience.html</div>
+        <div class="copy-hint" id="copy-hint">დაჭერით კოპირება</div>
+        <button class="btn-sml" onclick="openAudience()">გახსნა ახალ ჩანართში ↗</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://wxhaukichoycniioakbo.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4aGF1a2ljaG95Y25paW9ha2JvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDkxMjMsImV4cCI6MjA5NTIyNTEyM30.TEnZNISEzaCpGsj7liO4v6ihXgvyL8PnWwkHIP525Kw';
+
+const AGENDA = [
+  {id:1,  time:"09:30–10:00", speaker:"Registration, Coffee Break",          title:"",                                                                                                                   session:"pre",    isBreak:true},
+  {id:2,  time:"10:00–10:30", speaker:"Opening Ceremony",                     title:"Chairmen: Georgi Riabinkin, Mariam Chubinidze\nWelcome: Sophio Aspanidze · Nino Tabagari, MD, PhD",              session:"opening",isBreak:true},
+  {id:3,  time:"10:30–10:45", speaker:"Giorgi Aladashvili, MD",               title:"Pioneering Science: The 2024 Nobel Prizes in Medicine and Beyond",                                                session:"opening"},
+  {id:4,  time:"10:45–11:00", speaker:"Nino Giorgadze",                       title:"Medical Professionalism and Research Ethics: Stereotype Requirements and Beyond",                                  session:"opening"},
+  {id:5,  time:"11:00–11:15", speaker:"Anano Verdzadze",                      title:"Problems of Bone Mineral Density in the Pediatric Population of Adjara Region\nSupervisor: Neriman Tsintsadze, MD, Ph.D.",          session:"students"},
+  {id:6,  time:"11:15–11:30", speaker:"Nana Megrelidze, M.D.",                title:"Subarachnoid Hemorrhage Mimicking STEMI\nSupervisor: Magda Litzkendorf, M.D., Helios Klinikum Erfurt",          session:"students"},
+  {id:7,  time:"11:30–11:45", speaker:"Vasil Petriashvili",                   title:"Treatment of Hypertrophic Cardiomyopathy with Severe Refractory Symptoms\nCo-author: Elene Shioshvili",          session:"students"},
+  {id:8,  time:"11:45–12:00", speaker:"Ketevan Tchitchinadze, MS.",           title:"Biodegradable Heart Stents Revolutionizing Coronary Care\nSupervisor: Guram Sanadiradze, M.D., Ph.D.",          session:"students"},
+  {id:9,  time:"12:00–12:15", speaker:"Anna Bechvaya, MS.",                   title:"Produodopa Easier Way to Live with Parkinson's\nSupervisor: Eka Chkhartishvili, M.D., Ph.D.",                   session:"students"},
+  {id:10, time:"12:15–12:30", speaker:"Vera Savidi, MS.",                     title:"Transthyretin Amyloid Cardiomyopathy — A Silent Killer\nSupervisor: Guram Sanadiradze, M.D., Ph.D.",            session:"students"},
+  {id:11, time:"12:30–12:45", speaker:"Taha Kassim, MS.",                     title:"Rare Case of Syphilis: The Tullio Phenomenon Disclosure\nSupervisor: Tamar Chachibaia, M.D., PhD",              session:"students"},
+  {id:12, time:"12:45–13:00", speaker:"Syeda Fatima Zehra",                   title:"Therapeutic Potential Mesenchymal Exosomes in Pulmonary Fibrosis\nSupervisor: Ana Tchania, MD",                  session:"students"},
+  {id:13, time:"13:00–14:00", speaker:"Lunch Break",                          title:"",                                                                                                                   session:"break",  isBreak:true},
+  {id:14, time:"14:00–",      speaker:"Tamar Kacharava",                      title:"Fetal Programming: ADHD-like Symptoms in Early Childhood\nSupervisor: Dr. Ketevan Nemsadze, Ph.D., Prof.",       session:"phd"},
+  {id:15, time:"",            speaker:"Nino Khutsishvili",                    title:"Intradermal Glucocorticosteroid Microinjections and Topical Minoxidil in Female Androgenetic Alopecia\nSupervisor: Prof. Nino Lortkipanidze", session:"phd"},
+  {id:16, time:"",            speaker:"Tamar Gaprindashvili",                 title:"Blood Pressure Response to Sub Maximal Exercise and Left Ventricular Hypertrophy\nSupervisors: Prof. Rusudan Agladze · Zurab Pagava", session:"phd"},
+  {id:17, time:"",            speaker:"Vakhtang Gurabanidze",                 title:"Inflammatory Markers and Visceral Adipose Tissue in Development of Preeclampsia\nSupervisor: Tinatin Gagua, Associate Professor", session:"phd"},
+  {id:18, time:"",            speaker:"Aleksandre Ramishvili",                title:"Geomagnetic Storms on Heart Rate Variability and EEG α Frontal Asymmetry in Healthy Males\nSupervisors: Ketevan Janashia · Prof. Levan Tvildiani", session:"phd"},
+  {id:19, time:"",            speaker:"Elene Sherozia",                       title:"Diagnosis and Management of Progressive Fibrosing Interstitial Lung Diseases in Georgia\nSupervisors: Prof. Nino Tabagari · Prof. Maia Gotua", session:"phd"},
+  {id:20, time:"",            speaker:"Mariam Kacheishvili",                  title:"Optimizing Medical Education: The Integration and Impact of Whole Slide Imaging\nSupervisors: Prof. Nino Tabagari · Prof. Alexi Baidoshvili", session:"phd"},
+  {id:21, time:"",            speaker:"David Makaridze",                      title:"Diagnostic Accuracy of Aneurysmal Bone Cyst (ABC): Immunohistochemical Aspects\nSupervisor: Liana Gogiashvili", session:"phd"},
+  {id:22, time:"",            speaker:"Tamta Darsalia",                       title:"Preoperative Frailty and Postoperative Disorders in Geriatric Patients in Georgia\nSupervisor: Tamar Macharadze MD, Ph.D.", session:"phd"},
+  {id:23, time:"",            speaker:"Tinatin Giuashvili",                   title:"Early Detection of Cerebral Palsy Risk and Neurodevelopmental Outcome\nSupervisor: Prof. Nana Tatishvili PhD, MD", session:"phd"},
+  {id:24, time:"",            speaker:"Ana Bedoshvili",                       title:"Cerebral Visual Impairment (CVI) on Neurodevelopmental Outcome in Children at High Risk of Cerebral Palsy\nSupervisors: S. Tatishvili · N. Tatishvili · A. Guzzetta · R.N. Boyd", session:"phd"},
+  {id:25, time:"",            speaker:"Ana Khoperia",                         title:"Liquid-Based Cytology vs Routine Cytology Smears for Intraepithelial Lesion Detection\nSupervisor: Archil Sharashenidze, MD, Ph.D.", session:"phd"},
+  {id:26, time:"",            speaker:"Mariam Gugushvili",                    title:"Energy Homeostasis in Adolescence with Polycystic Ovary Syndrome\nSupervisor: Prof. B. Tkeshelashvili Ph.D. MD", session:"phd"},
+  {id:27, time:"",            speaker:"Nino Zavrashvili",                     title:"Calectin-3 and Glycoalbumin as Candidate Markers of Evaluation Type II\nSupervisor: Prof. Sergo Tabagari", session:"phd"},
+  {id:28, time:"",            speaker:"Ana Kvernadze, MD, Ph.D.",             title:"Rare and Complex Epilepsies – Correlation Between Aetiology and Outcome\nSupervisor: Prof. Nana Tatishvili Ph.D. MD", session:"phd"},
+  {id:29, time:"17:00",       speaker:"Closing",                              title:"",                                                                                                                   session:"closing",isBreak:true},
+];
+
+let sb = null;
+let currentId = 3;
+let channel = null;
+
+window.addEventListener('load', async () => {
+  try {
+    sb = supabase.createClient(SB_URL, SB_KEY);
+    const { data, error } = await sb.from('live_state').select('current_id').eq('id', 1).single();
+    if (error) throw error;
+    currentId = data.current_id;
+    startApp();
+  } catch(e) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('error-screen').style.display = 'flex';
+    console.error(e);
+  }
+});
+
+function startApp() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  const audienceUrl = window.location.href.replace('organizer.html', 'audience.html');
+  document.getElementById('audience-link-box').textContent = audienceUrl;
+
+  channel = sb.channel('live_state_changes')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'live_state' }, payload => {
+      currentId = payload.new.current_id;
+      render();
+    })
+    .subscribe(status => {
+      const dot = document.getElementById('status-dot');
+      const lbl = document.getElementById('status-label');
+      if (status === 'SUBSCRIBED') {
+        dot.classList.remove('offline');
+        lbl.textContent = 'Real-time ჩართულია';
+      } else {
+        dot.classList.add('offline');
+        lbl.textContent = 'დაკავშირება...';
+      }
+    });
+
+  render();
+}
+
+function getNextPresenter(fromId) {
+  const ci = AGENDA.findIndex(a => a.id === fromId);
+  for (let i = ci + 1; i < AGENDA.length; i++) {
+    if (!AGENDA[i].isBreak) return AGENDA[i];
+  }
+  return null;
+}
+function getPrevPresenter(fromId) {
+  const ci = AGENDA.findIndex(a => a.id === fromId);
+  for (let i = ci - 1; i >= 0; i--) {
+    if (!AGENDA[i].isBreak) return AGENDA[i];
+  }
+  return null;
+}
+
+function render() {
+  const cur = AGENDA.find(a => a.id === currentId);
+  const nxt = getNextPresenter(currentId);
+
+  document.getElementById('side-now-name').textContent = cur ? cur.speaker : '—';
+  document.getElementById('side-now-talk').textContent = cur ? (cur.title.split('\n')[0] || '') : '';
+  document.getElementById('side-next-name').textContent = nxt ? nxt.speaker : 'პროგრამა დასრულდა';
+  document.getElementById('side-next-talk').textContent = nxt ? (nxt.title.split('\n')[0] || '') : '';
+
+  const SECTIONS = [
+    { key:'pre',      label:'' },
+    { key:'opening',  label:'Opening Session (10:00–11:00)' },
+    { key:'students', label:"Students' Session (11:00–13:00)" },
+    { key:'break',    label:'' },
+    { key:'phd',      label:'PhD Session (14:00–17:00)\nChairman: Giorgi Aladashvili, MD · Ana Pruidze' },
+    { key:'closing',  label:'' },
+  ];
+  let html = '';
+  SECTIONS.forEach(sec => {
+    const items = AGENDA.filter(a => a.session === sec.key);
+    if (!items.length) return;
+    if (sec.label) {
+      const lines = sec.label.split('\n');
+      html += `<div class="section-title">${lines[0]}${lines[1] ? `<br><span style="font-size:10px;font-weight:400;color:rgba(255,255,255,.4)">${lines[1]}</span>` : ''}</div>`;
+    }
+    items.forEach(item => {
+      const isCur = item.id === currentId;
+      const isNxt = nxt && item.id === nxt.id;
+      const subs = item.title ? item.title.split('\n') : [];
+      html += `<div class="item ${isCur?'live':''} ${item.isBreak?'break':''}" onclick="${!item.isBreak?'setLive('+item.id+')':''}">
+        <div class="t-col">${item.time||''}</div>
+        <div class="divline"></div>
+        <div class="i-col">
+          <div class="i-name">${item.speaker}
+            ${isCur?'<span class="badge badge-live">● LIVE</span>':''}
+            ${isNxt?'<span class="badge badge-next">▶ Next</span>':''}
+          </div>
+          ${subs[0]?`<div class="i-sub"><b style="color:rgba(255,255,255,${isCur?'.85':'.65'})">${subs[0]}</b></div>`:''}
+          ${subs[1]?`<div class="i-sub">${subs[1]}</div>`:''}
+        </div>
+      </div>`;
+    });
+  });
+  document.getElementById('agenda-panel').innerHTML = html;
+
+  setTimeout(() => {
+    const live = document.querySelector('.item.live');
+    if (live) live.scrollIntoView({ behavior:'smooth', block:'center' });
+  }, 100);
+}
+
+async function setLive(id) {
+  currentId = id;
+  render();
+  await sb.from('live_state').update({ current_id: id }).eq('id', 1);
+}
+function moveNext() {
+  const nxt = getNextPresenter(currentId);
+  if (nxt) setLive(nxt.id);
+}
+function movePrev() {
+  const prv = getPrevPresenter(currentId);
+  if (prv) setLive(prv.id);
+}
+function copyLink() {
+  const txt = document.getElementById('audience-link-box').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    document.getElementById('copy-hint').textContent = '✓ კოპირდა!';
+    setTimeout(() => document.getElementById('copy-hint').textContent = 'დაჭერით კოპირება', 2000);
+  });
+}
+function openAudience() {
+  const url = window.location.href.replace('organizer.html', 'audience.html');
+  window.open(url, '_blank');
+}
+</script>
+</body>
+</html>
